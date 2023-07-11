@@ -19,6 +19,22 @@ import {
 import { SecretProvider } from "./secret-provider";
 import { ThumborMapper } from "./thumbor-mapper";
 
+import https from 'https';
+ import http from 'http';
+ import { URL } from "url";
+
+ const MAX_IMAGE_SIZE = 100 * 1024 * 1024; //10 MB limit
+ const ALLOWED_CONTENT_TYPES = [
+   'image/jpeg',
+   'image/jpg',
+   'image/png',
+   'image/gif',
+   'image/webp',
+   'image/bmp',
+ ];
+
+ const MAX_REDIRECTS = 3;
+
 type OriginalImageInfo = Partial<{
   contentType: string;
   expires: string;
@@ -143,6 +159,60 @@ export class ImageRequest {
     }
   }
 
+  public isValidURL(str: string) {
+    try {
+      new URL(str);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  public async getImageBytes(url: string, depth: number) {
+    return new Promise((resolve, reject) => {
+      const protocol = url.startsWith('https') ? https : http;
+      protocol.get(url, {headers: {'User-Agent': 'Mozilla/5.0'}}, response => {
+        
+        if (depth > MAX_REDIRECTS) {
+          reject(new Error(`Failed to get the image: too many redirects`));
+          return;
+        }
+        if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
+          const redirectUrl = response.headers.location;
+          return resolve(this.getImageBytes(redirectUrl, depth + 1));
+        }
+
+        if (response.statusCode !== 200) {
+          reject(new Error(`Failed to get the image, status code: ${response.statusCode}`));
+          return;
+        }
+        const contentType = response.headers['content-type'].split(';')[0];
+
+        if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
+          reject(new Error(`Invalid content type, only the following content types are allowed: ${ALLOWED_CONTENT_TYPES.join(', ')}`));
+          return;
+        }
+        let chunks = [];
+        let currentSize = 0;
+        response.on('data', (chunk: any) => {
+          chunks.push(chunk);
+          currentSize += chunk.length;
+          if (currentSize > MAX_IMAGE_SIZE) {
+            console.log('here', currentSize)
+            reject(new Error(`The image is too large, the maximum allowed size is ${MAX_IMAGE_SIZE} bytes`));
+            response.destroy();  
+          }
+        });
+        response.on('end', () => {
+          resolve(Buffer.concat(chunks));
+        });
+      })
+      .on('error', error => {
+        reject(error);
+      });
+    });
+  }
+
   /**
    * Gets the original image from an Amazon S3 bucket.
    * @param bucket The name of the bucket containing the image.
@@ -150,33 +220,44 @@ export class ImageRequest {
    * @returns The original image or an error.
    */
   public async getOriginalImage(bucket: string, key: string): Promise<OriginalImageInfo> {
+    let decodedURL = decodeURIComponent(key);
     try {
       const result: OriginalImageInfo = {};
 
       const imageLocation = { Bucket: bucket, Key: key };
-      const originalImage = await this.s3Client.getObject(imageLocation).promise();
-      const imageBuffer = Buffer.from(originalImage.Body as Uint8Array);
+      let imageBuffer: Buffer;
+      
+      if (this.isValidURL(decodedURL)) {
+        let imgBytes = await this.getImageBytes(decodedURL, 0);
+        imageBuffer = Buffer.from(imgBytes as Uint8Array);
 
-      if (originalImage.ContentType) {
-        // If using default S3 ContentType infer from hex headers
-        if (["binary/octet-stream", "application/octet-stream"].includes(originalImage.ContentType)) {
-          result.contentType = this.inferImageType(imageBuffer);
-        } else {
-          result.contentType = originalImage.ContentType;
-        }
+        result.contentType = this.inferImageType(imageBuffer);
+         // console.log(result.contentType)
+
       } else {
-        result.contentType = "image";
-      }
+        const originalImage = await this.s3Client.getObject(imageLocation).promise();
+        imageBuffer = Buffer.from(originalImage.Body as Uint8Array);
 
-      if (originalImage.Expires) {
-        result.expires = new Date(originalImage.Expires).toUTCString();
-      }
+        if (originalImage.ContentType) {
+          // If using default S3 ContentType infer from hex headers
+          if (["binary/octet-stream", "application/octet-stream"].includes(originalImage.ContentType)) {
+            result.contentType = this.inferImageType(imageBuffer);
+          } else {
+            result.contentType = originalImage.ContentType;
+          }
+        } else {
+          result.contentType = "image";
+        }
 
-      if (originalImage.LastModified) {
-        result.lastModified = new Date(originalImage.LastModified).toUTCString();
-      }
+        if (originalImage.Expires) {
+          result.expires = new Date(originalImage.Expires).toUTCString();
+        }
 
-      result.cacheControl = originalImage.CacheControl ?? "max-age=31536000,public";
+        if (originalImage.LastModified) {
+          result.lastModified = new Date(originalImage.LastModified).toUTCString();
+        }
+      }
+      result.cacheControl = "max-age=31536000,public";
       result.originalImage = imageBuffer;
 
       return result;
@@ -185,7 +266,7 @@ export class ImageRequest {
       let message = error.message;
       if (error.code === "NoSuchKey") {
         status = StatusCodes.NOT_FOUND;
-        message = `The image ${key} does not exist or the request may not be base64 encoded properly.`;
+        message = `The image ${decodedURL} does not exist or the request may not be base64 encoded properly.`;
       }
       throw new ImageHandlerError(status, error.code, message);
     }
@@ -314,6 +395,8 @@ export class ImageRequest {
     const matchDefault = /^(\/?)([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
     const matchThumbor =
       /^(\/?)((fit-in)?|(filters:.+\(.?\))?|(unsafe)?)(((.(?!(\.[^.\\/]+$)))*$)|.*(\.jpg$|\.jpeg$|.\.png$|\.webp$|\.tiff$|\.tif$|\.svg$|\.gif$))/i;
+    const matchURL = / |,|\.|\*|\+|\#|&|%|\$|\^/i;
+
     const { REWRITE_MATCH_PATTERN, REWRITE_SUBSTITUTION } = process.env;
     const definedEnvironmentVariables =
       REWRITE_MATCH_PATTERN !== "" &&
@@ -338,6 +421,8 @@ export class ImageRequest {
       return RequestTypes.CUSTOM;
     } else if (matchThumbor.test(path)) {
       // use thumbor mappings
+      return RequestTypes.THUMBOR;
+    } else if (matchURL.test(path)) {
       return RequestTypes.THUMBOR;
     } else {
       throw new ImageHandlerError(
@@ -445,6 +530,7 @@ export class ImageRequest {
         return ContentTypes.PNG;
       case "FFD8FFDB":
       case "FFD8FFE0":
+      case "FFD8FFED":
       case "FFD8FFEE":
       case "FFD8FFE1":
         return ContentTypes.JPEG;
