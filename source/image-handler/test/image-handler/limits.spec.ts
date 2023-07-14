@@ -29,7 +29,7 @@ describe("limits", () => {
       expect(error).toMatchObject({
         status: StatusCodes.REQUEST_TOO_LONG,
         code: "TooLargeImageException",
-        message: "The converted image is too large to return.",
+        message: `The converted image is too large to return.`,
       });
     }
   });

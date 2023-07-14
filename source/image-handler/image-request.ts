@@ -23,14 +23,13 @@ import https from 'https';
  import http from 'http';
  import { URL } from "url";
 
- const MAX_IMAGE_SIZE = 100 * 1024 * 1024; //10 MB limit
+ const MAX_IMAGE_SIZE = 100 * 1024 * 1024; //100 MB limit
  const ALLOWED_CONTENT_TYPES = [
-   'image/jpeg',
-   'image/jpg',
-   'image/png',
-   'image/gif',
-   'image/webp',
-   'image/bmp',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif',
+    'image/webp',
  ];
 
  const MAX_REDIRECTS = 3;
@@ -189,7 +188,7 @@ export class ImageRequest {
         const contentType = response.headers['content-type'].split(';')[0];
 
         if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
-          reject(new Error(`Invalid content type, only the following content types are allowed: ${ALLOWED_CONTENT_TYPES.join(', ')}`));
+          reject(new Error(`Invalid content type ${contentType}, only the following content types are allowed: ${ALLOWED_CONTENT_TYPES.join(', ')}`));
           return;
         }
         let chunks = [];
@@ -533,6 +532,7 @@ export class ImageRequest {
       case "FFD8FFED":
       case "FFD8FFEE":
       case "FFD8FFE1":
+      case "FFD8FFE2":
         return ContentTypes.JPEG;
       case "52494646":
         return ContentTypes.WEBP;

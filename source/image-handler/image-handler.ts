@@ -81,7 +81,7 @@ export class ImageHandler {
     // Apply edits if specified
     if (edits && Object.keys(edits).length) {
       // convert image to Sharp object
-      const image = await this.instantiateSharpImage(originalImage, edits, options);
+      const image = await this.instantiateSharpImage(originalImage, edits, {...options, ...{animated: true}});
       // apply image edits
       let modifiedImage = await this.applyEdits(image, edits, options.animated);
       // modify image output if requested
