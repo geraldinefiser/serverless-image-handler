@@ -40,6 +40,7 @@ type OriginalImageInfo = Partial<{
   lastModified: string;
   cacheControl: string;
   originalImage: Buffer;
+  decodedURL: string;
 }>;
 
 export class ImageRequest {
@@ -213,7 +214,7 @@ export class ImageRequest {
   }
 
   /**
-   * Gets the original image from an Amazon S3 bucket.
+   * Gets the original image from an Amazon S3 bucket or external URL.
    * @param bucket The name of the bucket containing the image.
    * @param key The key name corresponding to the image.
    * @returns The original image or an error.
@@ -229,9 +230,9 @@ export class ImageRequest {
       if (this.isValidURL(decodedURL)) {
         let imgBytes = await this.getImageBytes(decodedURL, 0);
         imageBuffer = Buffer.from(imgBytes as Uint8Array);
-
+        
         result.contentType = this.inferImageType(imageBuffer);
-         // console.log(result.contentType)
+        console.log(result.decodedURL)
 
       } else {
         const originalImage = await this.s3Client.getObject(imageLocation).promise();
@@ -258,6 +259,7 @@ export class ImageRequest {
       }
       result.cacheControl = "max-age=31536000,public";
       result.originalImage = imageBuffer;
+      result.decodedURL = decodedURL;
 
       return result;
     } catch (error) {

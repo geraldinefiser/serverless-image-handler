@@ -18,11 +18,21 @@ const rekognitionClient = new Rekognition(awsSdkOptions);
 const secretsManagerClient = new SecretsManager(awsSdkOptions);
 const secretProvider = new SecretProvider(secretsManagerClient);
 
+// Notes
+// In Image Handler: 
+// If resized image too big  -> Check if image is in bucket 
+//                           -> if not: save modified image to s3 bucket
+//                           -> add redirectUrl to throw return s3 image url 
+//                           -> when you get that exception in your application, you can return the redirectUrl instead of the exception message.
+
+
+
 /**
  * Image handler Lambda handler.
  * @param event The image handler request event.
  * @returns Processed request response.
  */
+
 export async function handler(event: ImageHandlerEvent): Promise<ImageHandlerExecutionResult> {
   console.info("Received event:", JSON.stringify(event, null, 2));
 
