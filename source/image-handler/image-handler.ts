@@ -74,7 +74,7 @@ export class ImageHandler {
    * @returns Processed and modified image encoded as base64 string.
    */
   async process(imageRequestInfo: ImageRequestInfo): Promise<string> {
-    const { originalImage, decodedURL, edits } = imageRequestInfo;
+    const { originalImage, edits } = imageRequestInfo;
     const options = { failOnError: false, animated: imageRequestInfo.contentType === ContentTypes.GIF };
     let base64EncodedImage = "";
 
@@ -105,37 +105,11 @@ export class ImageHandler {
     // binary data need to be base64 encoded to pass to the API Gateway proxy https://docs.aws.amazon.com/apigateway/latest/developerguide/lambda-proxy-binary-media.html.
     // checks whether base64 encoded image fits in 6M limit, see https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html.
     if (base64EncodedImage.length > this.LAMBDA_PAYLOAD_LIMIT) {
-      try {
-        
-        await this.s3Client.putObject({
-          Bucket: 'large-modified-images',
-          Key: `${decodedURL}`,
-          Body: Buffer.from(base64EncodedImage, 'base64'),
-          ContentType: imageRequestInfo.contentType
-        }).promise();
-  
-        // Get signed url for the large image
-        const signedUrl = this.s3Client.getSignedUrl('getObject', {
-          Bucket: 'large-modified-images',
-          Key: `${decodedURL}`,
-          Expires: 3600,
-        })
-
-        throw new ImageHandlerError(
-          StatusCodes.REQUEST_TOO_LONG,
-          'TooLargeImageException',
-          'The converted image is too large to return. You can still get the image from the redirect URL.',
-          `${signedUrl}`,
-        );
-
-      } catch {
-        throw new ImageHandlerError(
-          StatusCodes.REQUEST_TOO_LONG,
-          "TooLargeImageException",
-          "The converted image is too large to return."
-        );
-      }
-
+      throw new ImageHandlerError(
+        StatusCodes.REQUEST_TOO_LONG,
+        "TooLargeImageException",
+        "The converted image is too large to return."
+      );
     }
 
     return base64EncodedImage;

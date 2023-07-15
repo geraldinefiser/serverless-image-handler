@@ -42,7 +42,6 @@ export interface ImageRequestInfo {
   requestType: RequestTypes;
   bucket: string;
   key: string;
-  decodedURL?: string;
   edits?: ImageEdits;
   originalImage: Buffer;
   headers?: Headers;
