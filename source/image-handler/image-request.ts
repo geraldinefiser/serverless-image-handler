@@ -23,13 +23,14 @@ import https from 'https';
  import http from 'http';
  import { URL } from "url";
 
- const MAX_IMAGE_SIZE = 50 * 1024 * 1024; //50 MB limit
+ const MAX_IMAGE_SIZE = 30 * 1024 * 1024; //50 MB limit
  const ALLOWED_CONTENT_TYPES = [
     'image/jpeg',
     'image/jpg',
     'image/png',
-    'image/gif',
     'image/webp',
+    'binary/octet-stream',
+    'application/octet-stream',
  ];
 
  const MAX_REDIRECTS = 3;

@@ -23,6 +23,7 @@ const secretProvider = new SecretProvider(secretsManagerClient);
  * @param event The image handler request event.
  * @returns Processed request response.
  */
+
 export async function handler(event: ImageHandlerEvent): Promise<ImageHandlerExecutionResult> {
   console.info("Received event:", JSON.stringify(event, null, 2));
 

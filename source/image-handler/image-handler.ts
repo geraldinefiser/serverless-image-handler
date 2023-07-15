@@ -30,6 +30,7 @@ export class ImageHandler {
    * @param options Additional sharp options to be applied
    * @returns A Sharp image object
    */
+  
   // eslint-disable-next-line @typescript-eslint/ban-types
   private async instantiateSharpImage(originalImage: Buffer, edits: ImageEdits, options: Object): Promise<sharp.Sharp> {
     let image: sharp.Sharp = null;
